@@ -31,9 +31,9 @@ using (var hash = new Blake2B()) value = hash.ComputeHash(bytes);
 **Examples**
 
 ```
-~/Blake2.cs/bin/Debug $ echo -n HHHHAAAALLLLOOOOWWWWEEEELLLLTTTT > ./Hallo.txt
+~/Blake2B.cs/bin/Debug $ echo -n HHHHAAAALLLLOOOOWWWWEEEELLLLTTTT > ./Hallo.txt
 
-~/Blake2.cs/bin/Debug $ mono ./Blake2.exe --In=./Hallo.txt -- Hash512
+~/Blake2B.cs/bin/Debug $ mono ./Blake2B.exe --In=./Hallo.txt
 bbc9e82dbf9a8897a5ec2f6836c381dbe27ac0b8ecd9912afa67459ef9474d70a52bf24ad5dcf29dbb8004d19a387b6516cc47ffae99d59d52efc013456c6b48
 ```
 
