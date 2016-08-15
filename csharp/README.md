@@ -51,14 +51,10 @@ using System.Text;
 	var hashValue = new byte[64];
 
 	using (var hash = new Blake2B())
-	{		
-		ulong[] hashConfig = hash.Prepare();
-
+	{
 		do
 		{
 			Blake2B.UInt64ToBytes(i, hashSource, 0);
-
-			hash.Initialize(hashConfig);
 
 			hash.Compute(hashValue, hashSource);
 
