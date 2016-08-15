@@ -21,8 +21,6 @@ namespace Blake2
 {
 	public partial class Blake2B : HashAlgorithm
 	{
-		private ulong[] rawConfig;
-
 		private byte[] _Personalization;
 
 		public byte[] Personalization 
@@ -30,7 +28,7 @@ namespace Blake2
 			get { return _Personalization; }
 			set { 
 				_Personalization = value; 
-				_isInitialized = false;
+				HashClear();
 			}
 		}
 
@@ -41,7 +39,7 @@ namespace Blake2
 			get { return _Salt; }
 			set { 
 				_Salt = value; 
-				_isInitialized = false;
+				HashClear();
 			}
 		}
 
@@ -52,68 +50,110 @@ namespace Blake2
 			get { return _Key; }
 			set { 
 				_Key = value; 
-				_isInitialized = false;
+				HashClear();
 			}
 		}
 
-		private Blake2BTreeConfig _TreeConfig;
+		private uint _IntermediateHashSize;
 
-		public Blake2BTreeConfig TreeConfig
+		public uint IntermediateHashSize
 		{ 
-			get { return _TreeConfig; }
+			get { return _IntermediateHashSize; }
 			set { 
-				_TreeConfig = value; 
-				_isInitialized = false;
+				_IntermediateHashSize = value; 
+				HashClear();
 			}
 		}
 
-		private int _outputSizeInBytes;
+		private uint _MaxHeight;
 
-		public int OutputSizeInBytes 
+		public uint MaxHeight
 		{ 
-			get { return _outputSizeInBytes; }
-			protected set 
-			{ 
-				if (value <= 0 || value > 64)
-					throw new IndexOutOfRangeException("OutputSizeInBytes");
-				if (value % 8 != 0)
-					throw new IndexOutOfRangeException("OutputSizeInBytes must be a multiple of 8");
-
-				_outputSizeInBytes = value;
+			get { return _MaxHeight; }
+			set { 
+				_MaxHeight = value; 
+				HashClear();
 			}
 		}
 
-		public override int HashSize { get { return OutputSizeInBytes * 8; } }
+		private ulong _LeafSize;
+
+		public ulong LeafSize
+		{ 
+			get { return _LeafSize; }
+			set { 
+				_LeafSize = value; 
+				HashClear();
+			}
+		}
+
+		private uint _FanOut;
+
+		public uint FanOut
+		{ 
+			get { return _FanOut; }
+			set { 
+				_FanOut = value; 
+				HashClear();
+			}
+		}
+
+		private int _hashSizeInBytes;
+
+		public int HashSizeInBytes { get { return _hashSizeInBytes; } }
+
+		public override int HashSize { get { return HashSizeInBytes * 8; } }
+
+		public override byte[] Hash 
+		{
+			get {
+				// if (m_bDisposed) throw new ObjectDisposedException(null);
+				// if (State != 0) throw new CryptographicUnexpectedOperationException(Environment.GetResourceString("Cryptography_HashNotYetFinalized"));
+				var _hash = new byte[HashSizeInBytes];
+				for (int i = 0; i < 8; ++i) UInt64ToBytes(hash[i], _hash, i << 3);
+				return _hash;
+			}
+		}
 
 		public Blake2B() : this(64) { }
 
-		public Blake2B(int outputSizeInBytes)
-		{			
-			OutputSizeInBytes = outputSizeInBytes;
+		public Blake2B(int hashSizeInBytes)
+		{	
+			if (hashSizeInBytes <= 0 || hashSizeInBytes > 64)
+				throw new ArgumentOutOfRangeException("hashSizeInBytes");
+			if (hashSizeInBytes % 8 != 0)
+				throw new ArgumentOutOfRangeException("hashSizeInBytes", "must be a multiple of 8");
+			
+			_hashSizeInBytes = hashSizeInBytes;
+
+			_FanOut = 1;
+			_MaxHeight = 1;
+			// _LeafSize = 0;
+			// _IntermediateHashSize = 0;
 		}
 
 		private bool _isInitialized = false;
 
-		private int _bufferFilled;
-		private byte[] _buf = new byte[128];
-		private ulong[] _h = new ulong[8];
-		private ulong[] _m = new ulong[16];
+		private int bufferFilled;
+		private byte[] buffer = new byte[128];
+		private ulong[] hash = new ulong[8];
+		private ulong[] material = new ulong[16];
 		private ulong _counter0;
 		private ulong _counter1;
 		private ulong _finalizationFlag0;
 		private ulong _finalizationFlag1;
 
-		private const int NumberOfRounds = 12;
-		private const int BlockSizeInBytes = 128;
+		public const int NumberOfRounds = 12;
+		public const int BlockSizeInBytes = 128;
 
-		const ulong IV0 = 0x6A09E667F3BCC908UL;
-		const ulong IV1 = 0xBB67AE8584CAA73BUL;
-		const ulong IV2 = 0x3C6EF372FE94F82BUL;
-		const ulong IV3 = 0xA54FF53A5F1D36F1UL;
-		const ulong IV4 = 0x510E527FADE682D1UL;
-		const ulong IV5 = 0x9B05688C2B3E6C1FUL;
-		const ulong IV6 = 0x1F83D9ABFB41BD6BUL;
-		const ulong IV7 = 0x5BE0CD19137E2179UL;
+		public const ulong IV0 = 0x6A09E667F3BCC908UL;
+		public const ulong IV1 = 0xBB67AE8584CAA73BUL;
+		public const ulong IV2 = 0x3C6EF372FE94F82BUL;
+		public const ulong IV3 = 0xA54FF53A5F1D36F1UL;
+		public const ulong IV4 = 0x510E527FADE682D1UL;
+		public const ulong IV5 = 0x9B05688C2B3E6C1FUL;
+		public const ulong IV6 = 0x1F83D9ABFB41BD6BUL;
+		public const ulong IV7 = 0x5BE0CD19137E2179UL;
 
 		public static readonly int[] Sigma = new int[NumberOfRounds * 16] {
 			0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
@@ -155,58 +195,43 @@ namespace Blake2
 			buf[offset] = (byte)value;
 		}
 
-		public override void Initialize()
+		public virtual ulong[] Prepare()
 		{
-			if (rawConfig != null)
-				Array.Clear(rawConfig, 0, rawConfig.Length);
-			else
-				rawConfig = new ulong[8];
+			var rawConfig = new ulong[8];
 
 			// digest length
-			rawConfig[0] |= (ulong)(uint)OutputSizeInBytes;
+			rawConfig[0] |= (ulong)(uint)HashSizeInBytes;
 
 			// Key length
 			if (Key != null)
 			{
 				if (Key.Length > 64)
 					throw new ArgumentException("Key", "Key too long");
+
 				rawConfig[0] |= (ulong)((uint)Key.Length << 8);
 			}
 
-			bool isSequential = TreeConfig == null;
-			if (isSequential)
-			{
-				// FanOut
-				rawConfig[0] |= (uint)1 << 16;
-				// Depth
-				rawConfig[0] |= (uint)1 << 24;
-				// Leaf length
-				rawConfig[0] |= (uint)0 << 32;
-				// Inner length
-				rawConfig[2] |= (uint)0 << 8;
-			}
-			else
-			{
-				if (TreeConfig.IntermediateHashSize <= 0 || TreeConfig.IntermediateHashSize > 64)
-					throw new ArgumentOutOfRangeException("TreeConfig.IntermediateHashSize");
+			if (IntermediateHashSize > 64)
+				throw new ArgumentOutOfRangeException("IntermediateHashSize");
 
-				// FanOut
-				rawConfig[0] |= (uint)TreeConfig.FanOut << 16;
-				// Depth
-				rawConfig[0] |= (uint)TreeConfig.MaxHeight << 24;
-				// Leaf length
-				rawConfig[0] |= ((ulong)(uint)TreeConfig.LeafSize) << 32;
-				// Inner length
-				rawConfig[2] |= (uint)TreeConfig.IntermediateHashSize << 8;
-			}
+			// bool isSequential = TreeConfig == null;
+			// FanOut
+			rawConfig[0] |= FanOut << 16;
+			// Depth
+			rawConfig[0] |= MaxHeight << 24;
+			// Leaf length
+			rawConfig[0] |= LeafSize << 32;
+			// Inner length
+			rawConfig[2] |= IntermediateHashSize << 8;
+
 			// Salt
 			if (Salt != null)
 			{
 				if (Salt.Length != 16)
 					throw new ArgumentException("Salt has invalid length");
 
-				rawConfig[4] = Blake2B.BytesToUInt64(Salt, 0);
-				rawConfig[5] = Blake2B.BytesToUInt64(Salt, 8);
+				rawConfig[4] = BytesToUInt64(Salt, 0);
+				rawConfig[5] = BytesToUInt64(Salt, 8);
 			}
 			// Personalization
 			if (Personalization != null)
@@ -214,11 +239,16 @@ namespace Blake2
 				if (Personalization.Length != 16)
 					throw new ArgumentException("Personalization has invalid length");
 
-				rawConfig[6] = Blake2B.BytesToUInt64(Personalization, 0);
-				rawConfig[7] = Blake2B.BytesToUInt64(Personalization, 8);
+				rawConfig[6] = BytesToUInt64(Personalization, 0);
+				rawConfig[7] = BytesToUInt64(Personalization, 8);
 			}
 
-			Initialize(rawConfig);
+			return rawConfig;
+		}
+
+		public override void Initialize()
+		{
+			Initialize(Prepare());
 		}
 
 		/* public static void ConfigBSetNode(ulong[] rawConfig, byte depth, ulong nodeOffset)
@@ -233,39 +263,60 @@ namespace Blake2
 				throw new ArgumentNullException("config");
 			if (config.Length != 8)
 				throw new ArgumentException("config length must be 8 words");
-			
+
+			HashClear();
+
+			for (int i = 0; i < 8; i++) hash[i] ^= config[i];
+
 			_isInitialized = true;
 
-			_h[0] = IV0;
-			_h[1] = IV1;
-			_h[2] = IV2;
-			_h[3] = IV3;
-			_h[4] = IV4;
-			_h[5] = IV5;
-			_h[6] = IV6;
-			_h[7] = IV7;
+			if (Key != null) HashCore(Key, 0, Key.Length);
+		}
+
+		public virtual void HashClear()
+		{
+			_isInitialized = false;
+
+			hash[0] = IV0;
+			hash[1] = IV1;
+			hash[2] = IV2;
+			hash[3] = IV3;
+			hash[4] = IV4;
+			hash[5] = IV5;
+			hash[6] = IV6;
+			hash[7] = IV7;
 
 			_counter0 = 0;
 			_counter1 = 0;
 			_finalizationFlag0 = 0;
 			_finalizationFlag1 = 0;
 
-			_bufferFilled = 0;
+			bufferFilled = 0;
 
-			Array.Clear(_buf, 0, _buf.Length);
+			Array.Clear(buffer, 0, buffer.Length);
 
-			for (int i = 0; i < 8; i++)
-				_h[i] ^= config[i];
-			
+			Array.Clear(material, 0, material.Length);
+
+			if (Personalization != null)
+			{
+				Array.Clear(Personalization, 0, Personalization.Length);
+				Personalization = null;
+			}
+			if (Salt != null)
+			{
+				Array.Clear(Salt, 0, Salt.Length);
+				Salt = null;
+			}
 			if (Key != null)
 			{
-				HashCore(Key, 0, Key.Length);
+				Array.Clear(Key, 0, Key.Length);
+				Key = null;
 			}
 		}
 
 		partial void Compress(byte[] block, int start);
 
-		protected override void HashCore(byte[] array, int start, int count)
+		public virtual void Core(byte[] array, int start, int count)
 		{
 			if (array == null)
 				throw new ArgumentNullException("array");
@@ -273,41 +324,46 @@ namespace Blake2
 				throw new ArgumentOutOfRangeException("start");
 			if (count < 0)
 				throw new ArgumentOutOfRangeException("count");
-			if ((long)start + (long)count > array.Length)
-				throw new ArgumentOutOfRangeException("start+count");
+			if (start + count > array.Length)
+				throw new ArgumentOutOfRangeException("start + count");
 
 			if (!_isInitialized) Initialize();
 
-			int offset = start;
-			int bufferRemaining = BlockSizeInBytes - _bufferFilled;
-
-			if ((_bufferFilled > 0) && (count > bufferRemaining))
+			int bufferRemaining = BlockSizeInBytes - bufferFilled;
+			if (bufferFilled > 0 && count > bufferRemaining)
 			{
-				Array.Copy(array, offset, _buf, _bufferFilled, bufferRemaining);
+				Buffer.BlockCopy(array, start, buffer, bufferFilled, bufferRemaining);
 				_counter0 += BlockSizeInBytes;
-				if (_counter0 == 0)
-					_counter1++;
-				Compress(_buf, 0);
-				offset += bufferRemaining;
+				if (_counter0 == 0) _counter1++;
+
+				Compress(buffer, 0);
+
+				start += bufferRemaining;
 				count -= bufferRemaining;
-				_bufferFilled = 0;
+				bufferFilled = 0;
 			}
 
 			while (count > BlockSizeInBytes)
 			{
 				_counter0 += BlockSizeInBytes;
-				if (_counter0 == 0)
-					_counter1++;
-				Compress(array, offset);
-				offset += BlockSizeInBytes;
+				if (_counter0 == 0) _counter1++;
+
+				Compress(array, start);
+
+				start += BlockSizeInBytes;
 				count -= BlockSizeInBytes;
 			}
 
 			if (count > 0)
 			{
-				Array.Copy(array, offset, _buf, _bufferFilled, count);
-				_bufferFilled += count;
+				Buffer.BlockCopy(array, start, buffer, bufferFilled, count);
+				bufferFilled += count;
 			}
+		}
+
+		protected override void HashCore(byte[] array, int start, int count)
+		{
+			Core(array, start, count);
 		}
 
 		protected override byte[] HashFinal ()
@@ -317,68 +373,62 @@ namespace Blake2
 
 		protected virtual byte[] HashFinal(bool isEndOfLayer)
 		{
+			var _hash = new byte[HashSizeInBytes];
+			Final(_hash, false);
+			return _hash;
+		}
+
+		public virtual byte[] Final()
+		{
+			var _hash = new byte[HashSizeInBytes];
+			Final(_hash, false);
+			return _hash;
+		}
+
+		public virtual void Final(byte[] _hash)
+		{
+			Final(_hash, false);
+		}
+
+		public virtual void Final(byte[] _hash, bool isEndOfLayer)
+		{
+			if (_hash.Length != HashSizeInBytes)
+				throw new ArgumentOutOfRangeException("_hash", "length must be HashSizeInBytes");
+
 			if (!_isInitialized) Initialize();
 
-			_isInitialized = false;
-
-			//Last compression
-			_counter0 += (uint)_bufferFilled;
+			// Last compression
+			_counter0 += (uint)bufferFilled;
 			_finalizationFlag0 = ulong.MaxValue;
-			if (isEndOfLayer)
-				_finalizationFlag1 = ulong.MaxValue;
-			for (int i = _bufferFilled; i < _buf.Length; i++)
-				_buf[i] = 0;
-			Compress(_buf, 0);
+			if (isEndOfLayer) _finalizationFlag1 = ulong.MaxValue;
 
-			//Output
-			byte[] hash = new byte[64];
-			for (int i = 0; i < 8; ++i)
-				UInt64ToBytes(_h[i], hash, i << 3);
-			return hash;
+			for (int i = bufferFilled; i < buffer.Length; i++) buffer[i] = 0x00;
+
+			Compress(buffer, 0);
+
+			// Output
+			for (int i = 0; i < 8; ++i) UInt64ToBytes(hash[i], _hash, i << 3);
+
+			HashClear();
+		}
+
+		public virtual void Compute(byte[] value, byte[] sourceCode)
+		{
+			Core(sourceCode, 0, sourceCode.Length);
+			Final(value);
+		}
+
+		public virtual byte[] Compute(byte[] sourceCode)
+		{
+			var value = new byte[HashSizeInBytes];
+			Core(sourceCode, 0, sourceCode.Length);
+			Final(value);
+			return value;
 		}
 
 		protected override void Dispose(bool disposing)
 		{
-			if (disposing)
-			{
-				_isInitialized = false;
-				
-				if (rawConfig != null)
-				{
-					Array.Clear(rawConfig, 0, rawConfig.Length);
-					rawConfig = null;
-				}
-				if (_buf != null)
-				{
-					Array.Clear(_buf, 0, _buf.Length);
-					_buf = null;
-				}
-				if (_h != null)
-				{
-					Array.Clear(_h, 0, _h.Length);
-					_h = null;
-				}
-				if (_m != null)
-				{
-					Array.Clear(_m, 0, _m.Length);
-					_m = null;
-				}
-				if (Personalization != null)
-				{
-					Array.Clear(Personalization, 0, Personalization.Length);
-					Personalization = null;
-				}
-				if (Salt != null)
-				{
-					Array.Clear(Salt, 0, Salt.Length);
-					Salt = null;
-				}
-				if (Key != null)
-				{
-					Array.Clear(Key, 0, Key.Length);
-					Key = null;
-				}
-			}
+			if (disposing) HashClear();
 			base.Dispose(disposing);
 		}
 	}

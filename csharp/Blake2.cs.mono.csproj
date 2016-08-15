@@ -17,6 +17,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <ConsolePause>false</ConsolePause>
+    <Commandlineparameters>--in=./Hallo.txt -- Hash512</Commandlineparameters>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>full</DebugType>
@@ -33,7 +34,6 @@
   <ItemGroup>
     <Compile Include="AssemblyInfo.cs" />
     <Compile Include="Blake2B.cs" />
-    <Compile Include="Blake2BTreeConfig.cs" />
     <Compile Include="Blake2B-FullyUnrolled.cs" />
     <Compile Include="Blake2B-Inline.cs" />
     <Compile Include="Blake2B-Simple.cs" />
